@@ -1,7 +1,7 @@
 ---
 schema: 1
-uniqueName: jcode.ext.sqlserver
-name: SQL Server
+uniqueName: jcode.ext.sqlclient
+name: SQL Client
 version: 0.2.0
 type: dbmanager
 publisher: jcode
@@ -30,10 +30,10 @@ entry:
 fingerprint: { algo: sha256, value: null }
 ---
 
-# SQL Server
+# SQL Client
 
 A pure **Microsoft SQL Server** client and database manager for JCode. Open it
-from the left drawer: **DB Managers → SQL Server**.
+from the left drawer: **DB Managers → SQL Client**.
 
 It connects to a SQL Server you run **elsewhere** — a remote host, a cloud
 instance, or a local x86 VM created with the **VM Manager** extension — using the

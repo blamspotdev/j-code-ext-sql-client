@@ -1,5 +1,5 @@
-id: jcode.ext.sqlserver
-name: SQL Server
+id: jcode.ext.sqlclient
+name: SQL Client
 version: 0.2.0
 type: dbmanager
 publisher: jcode
