@@ -1,19 +1,66 @@
 id: jcode.ext.sqlclient
 name: SQL Client
-version: 0.2.1
+version: 0.3.1
 type: dbmanager
 publisher: jcode
 authors: [jcode, blamspotdev]
 supportedArches: [arm64]
-description: A pure Microsoft SQL Server client — connect, browse databases and tables, edit rows, and back up/restore.
+description: A Microsoft SQL Server studio — browse databases in the drawer, then manage tables, run queries, view ER diagrams and security in a full editor-area studio.
 longDescription: >
-  A pure Microsoft SQL Server client and database manager. Use the ARM64-native
-  sqlcmd client (installed by this extension) to connect to any reachable SQL
-  Server — a remote host, a cloud instance, or a local x86 VM created with the
-  VM Manager extension. Run ad-hoc queries, browse databases and tables, view
-  the top 1000 rows, create / rename / drop tables, run INSERT / UPDATE / DELETE
-  via the DML helper, and back up or restore databases. There is no local
-  engine; to run SQL Server itself, pair this with the VM Manager extension or
-  connect to any existing server.
+  A Microsoft SQL Server client and database studio. The left drawer shows the databases on the
+  server configured in Settings; tap one to open a full SQL Studio as an editor tab with Tables,
+  Query, Diagram and Security panes. Browse and edit table data, view table structure, create /
+  rename / drop tables, run ad-hoc queries with a results grid, see an auto-generated entity-
+  relationship diagram of the schema, and inspect logins, users and role memberships. Uses the
+  ARM64-native sqlcmd client (installed on first use) to reach any SQL Server — a remote host, a
+  cloud instance, or a local x86 VM created with the VM Manager extension. Connection details
+  (server, login, password, database) live in app Settings, so no credentials are entered in the UI.
+api:
+  minApiVersion: 1
+  capabilities: [exec, config, workbench]
+settings:
+  - key: sql.server
+    label: Server (host,port)
+    type: str
+    default: localhost,1433
+    description: SQL Server address as host,port — e.g. localhost,1433 or a VM's forwarded host port.
+  - key: sql.user
+    label: Login
+    type: str
+    default: sa
+    description: SQL Server login name.
+  - key: sql.password
+    label: Password
+    type: str
+    default: JCodeVm2026.
+    description: SQL Server password. Stored locally on this device. The default matches the VM
+      Manager's SQL Server setup default — change both if you set your own SA password.
+  - key: sql.database
+    label: Initial database
+    type: str
+    default: master
+    description: Database used to enumerate the server (the studio opens the one you tap).
+  - key: sql.trustCert
+    label: Trust server certificate
+    type: bool
+    default: true
+    description: Accept the server's TLS certificate without validation (needed for self-signed certs).
 requires:
   extensions: []
+
+# --- header fields merged from extension.jehm ---
+shortDescription: >-
+  A SQL Server studio — browse databases in the drawer, then manage tables, run queries, view ER diagrams and security
+  in a full editor studio.
+minJCodeVersion: 1.0.0
+targetJCodeVersion: 1.0.0
+category: Databases
+subcategory: SQL Server
+images:
+  icon: media/icon.png
+  samples: []
+  walkthrough: []
+entry:
+  manifest: extension.yaml
+  ui: www/index.html
+  libs: []
