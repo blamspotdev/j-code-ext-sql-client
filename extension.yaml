@@ -1,6 +1,6 @@
 id: jcode.ext.sqlclient
 name: SQL Client
-version: 0.3.1
+version: 0.3.2
 type: dbmanager
 publisher: jcode
 authors: [jcode, blamspotdev]
@@ -47,6 +47,7 @@ settings:
     description: Accept the server's TLS certificate without validation (needed for self-signed certs).
 requires:
   extensions: []
+  sdks: [sqlcmd]
 
 # --- header fields merged from extension.jehm ---
 shortDescription: >-
