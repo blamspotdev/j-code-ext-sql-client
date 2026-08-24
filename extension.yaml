@@ -1,6 +1,6 @@
 id: jcode.ext.sqlclient
 name: SQL Client
-version: 0.4.0
+version: 0.4.1
 type: dbmanager
 publisher: jcode
 authors: [jcode, blamspotdev]
