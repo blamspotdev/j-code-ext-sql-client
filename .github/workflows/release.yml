@@ -44,6 +44,12 @@ jobs:
         with:
           # The parent commit is needed to tell "this PR set the version" from "nobody did".
           fetch-depth: 2
+          # `main` is protected, so the bump push at the end needs an actor its ruleset lets
+          # through. The bypass is granted to the Repository admin role, which `GITHUB_TOKEN` is
+          # not — it acts as the GitHub Actions app — so a PAT belonging to an admin does the push.
+          # Granting the bypass to GitHub Actions instead makes the default token enough and this
+          # secret unnecessary; written as a fallback so either setup works.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
       - name: Read the manifest
         id: manifest
@@ -100,9 +106,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -q -m "Release $next [skip ci]" extension.yaml
-          # `main` is protected; GitHub Actions holds a bypass so this one push lands. A push made
-          # with GITHUB_TOKEN starts no new run, and `[skip ci]` says the same thing again in case
-          # the token is ever swapped for a PAT — between them this cannot loop.
+          # `[skip ci]` above is what stops this from looping: a push made with GITHUB_TOKEN starts
+          # no run at all, but a push made with a PAT does, and that run would bump again.
           git push -q origin "HEAD:$GITHUB_REF_NAME"
           echo "version=$next" >> "$GITHUB_OUTPUT"
 
