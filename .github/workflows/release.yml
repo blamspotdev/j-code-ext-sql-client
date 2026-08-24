@@ -44,6 +44,11 @@ jobs:
         with:
           # The parent commit is needed to tell "this PR set the version" from "nobody did".
           fetch-depth: 2
+          # `main` is protected and its bypass is granted to the Repository admin role, which
+          # `GITHUB_TOKEN` is not — it acts as the GitHub Actions app, and its push is rejected with
+          # "Changes must be made through a pull request". A PAT belonging to an admin does the push.
+          # Written as a fallback so that granting the bypass to GitHub Actions instead also works.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
       - name: Read the manifest
         id: manifest
