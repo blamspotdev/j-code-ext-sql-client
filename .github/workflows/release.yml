@@ -1,0 +1,24 @@
+# Build this extension into a `.jext` and publish it to Releases.
+#
+# Bumping `version:` in extension.yaml is what asks for a release — a merge that leaves it alone
+# finds its tag already published and stops. The build itself lives in the marketplace repo so that
+# every Dev Pack and App shares one copy of it rather than fifteen that drift apart.
+#
+# What lands on the release is a PLAIN, unsigned package: signing is the marketplace's job and its
+# key never reaches CI. See the reusable workflow for why.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    # The version lives in the manifest, so nothing else can ask for a release.
+    paths: ['extension.yaml']
+  workflow_dispatch:
+
+jobs:
+  release:
+    uses: blamspotdev/j-code-marketplace/.github/workflows/release-jext.yml@main
+    permissions:
+      contents: write
+    # Passes JEXT_TOOLS_TOKEN through while the packer repo is private.
+    secrets: inherit
