@@ -170,6 +170,12 @@ jobs:
         run: npm ci --no-audit --no-fund
         working-directory: .jext-tools
 
+      - name: Move the packer out of the extension
+        # `jext pack .` packs the working directory, so a tool checked out inside it ships inside
+        # the package — every extension published before this carried a copy of the packer. The
+        # runner's temp directory is outside the workspace, so nothing here can be swept up.
+        run: mv .jext-tools "$RUNNER_TEMP/jext-tools"
+
       - name: Make the Gradle wrapper runnable
         if: steps.shape.outputs.gradle == 'true'
         # The wrapper is committed non-executable by repos worked on from Windows, and `build.mjs`
@@ -181,7 +187,7 @@ jobs:
       - name: Pack
         # `jext pack` runs the extension's own `npm run build` when it declares one, so this single
         # command covers all three shapes: no build step, esbuild, and Gradle.
-        run: node .jext-tools/bin/jext.js pack . -o out
+        run: node "$RUNNER_TEMP/jext-tools/bin/jext.js" pack . -o out
 
       - name: Keep the package on the run
         # What a merge that did not bump the version leaves behind: the same unsigned package a
