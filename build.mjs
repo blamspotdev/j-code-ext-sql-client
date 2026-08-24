@@ -1,39 +1,30 @@
-// Production build for the VM Manager extension.
-// Type-checks with tsc, then bundles + minifies TypeScript/CSS into the deployable www/.
-// `jext pack` runs this (npm run build) before packaging; www/ is the only output that ships.
-import { build } from 'esbuild';
+// Production build for the SQL Client extension.
+//
+// What ships is one file: `lib/sqlstudio.dex`, the extension's own code, drawn by JCode's Compose
+// runtime inside JCode's process. `jext pack` runs this (npm run build) before packaging.
+//
+// The dex is taken from the merge task's output rather than unzipped back out of the APK the Android
+// plugin builds around it: the APK is a by-product here — this plugin owns no resources, so there is
+// no resource table for JCode to attach and nothing else in the archive worth keeping.
+//
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-const OUT = 'www';
 const win = process.platform === 'win32';
+// Absolute, because a bare `gradlew.bat` is not found in the working directory the way `./gradlew`
+// is on a POSIX shell, and the two platforms disagree about which relative spelling works.
+const gradlew = resolve('studio', win ? 'gradlew.bat' : 'gradlew');
+const DEX = 'studio/build/intermediates/dex/release/mergeDexRelease/classes.dex';
 
-// 1. Type-check (fails the build on any TS error — this is a production build).
-const tc = spawnSync('npx', ['tsc', '--noEmit'], { stdio: 'inherit', shell: win });
-if (tc.status !== 0) process.exit(tc.status || 1);
-
-// 2. Fresh output dir.
-rmSync(OUT, { recursive: true, force: true });
-mkdirSync(OUT, { recursive: true });
-
-// 3. Bundle + minify the app and styles.
-await build({
-  entryPoints: ['src/main.ts'],
-  bundle: true,
-  minify: true,
-  format: 'iife',
-  target: 'es2019',
-  legalComments: 'none',
-  outfile: `${OUT}/main.js`,
+const build = spawnSync(gradlew, ['assembleRelease'], {
+  cwd: 'studio',
+  stdio: 'inherit',
+  shell: win,
 });
-await build({
-  entryPoints: ['src/styles.css'],
-  bundle: true,
-  minify: true,
-  outfile: `${OUT}/styles.css`,
-});
+if (build.status !== 0) process.exit(build.status || 1);
 
-// 4. Ship the HTML shell verbatim (it references ./styles.css and ./main.js).
-copyFileSync('src/index.html', `${OUT}/index.html`);
+mkdirSync('lib', { recursive: true });
+copyFileSync(DEX, 'lib/sqlstudio.dex');
 
-console.log('✓ built src/ → www/ (index.html, main.js, styles.css)');
+console.log('✓ built studio/ → lib/sqlstudio.dex');

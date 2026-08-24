@@ -1,3 +1,6 @@
 node_modules/
 www/
 *.jext
+lib/
+studio/build/
+studio/.gradle/
