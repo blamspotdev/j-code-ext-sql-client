@@ -1,12 +1,20 @@
-# Build this extension into a `.jext` and publish it to Releases.
+# Publish this extension: bump, pack, release.
 #
-# Every merge to main packs the extension and leaves the package on the run as an artifact; bumping
-# `version:` in extension.yaml is what turns that build into a published Release. The build itself
-# lives in the marketplace repo so that every Dev Pack and App shares one copy of it rather than
-# fifteen that drift apart.
+# A merge to `main` is what publishes. The run bumps the patch version on `main`, packs the
+# extension into a `.jext` at that version, and attaches it to THIS repo's Releases as `v<version>`
+# — so every merged PR is downloadable as a package without anyone editing a version by hand. A PR
+# that set `version:` itself is taken at its word and nothing is added on top.
 #
-# What lands on the release is a PLAIN, unsigned package: signing is the marketplace's job and its
-# key never reaches CI. See the reusable workflow for why.
+# Everything the build needs is here. The only outside thing it fetches is the packer CLI, which is
+# a tool rather than a dependency of the release: nothing about publishing this extension waits on
+# another repo.
+#
+# **This produces a PLAIN `.jext`, never a signed one.** Signing is the marketplace's job and the
+# key never reaches CI: it is the root of trust for code that runs inside JCode's own process, and
+# a public extension repo is not where that belongs. A release asset from here is installable as a
+# development sideload; an extension that ships native code will refuse to load its dex until the
+# same package has been signed for the marketplace, which is where a release meant for everyday use
+# comes from.
 name: Release
 
 on:
@@ -14,8 +22,193 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  # Used only when the extension has a Gradle module; the platform must cover its compileSdk.
+  JAVA_VERSION: '21'
+  ANDROID_PLATFORM: 'platforms;android-36'
+
 jobs:
   release:
-    uses: blamspotdev/j-code-marketplace/.github/workflows/release-jext.yml@main
+    runs-on: ubuntu-latest
     permissions:
+      # The bump commit, the tag and the release. Nothing else.
       contents: write
+    # Two merges landing together would each bump from the same starting version and the second
+    # push would be rejected. Queued rather than cancelled: the first merge still gets its release.
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out the extension
+        uses: actions/checkout@v4
+        with:
+          # The parent commit is needed to tell "this PR set the version" from "nobody did".
+          fetch-depth: 2
+
+      - name: Read the manifest
+        id: manifest
+        # Node rather than a YAML parser: `version: 1.10` is a string to everyone except a YAML
+        # loader, which reads it as the number 1.1 and would tag the wrong release.
+        run: |
+          read_field() {
+            node -e "
+              const src = require('fs').readFileSync('extension.yaml', 'utf8');
+              const m = src.match(/^$1:[ \t]*(.+)$/m);
+              if (!m) { console.error('extension.yaml has no $1:'); process.exit(1); }
+              console.log(m[1].trim().replace(/\s+#.*$/, '').replace(/^['\"]|['\"]$/g, ''));
+            "
+          }
+          {
+            echo "id=$(read_field id)"
+            echo "version=$(read_field version)"
+            echo "name=$(read_field name)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Bump the version
+        id: version
+        # A merged PR is what publishes, so the patch digit moves here rather than in fifteen PRs
+        # that would each have to remember. A PR that set `version:` itself is taken at its word —
+        # that is how a minor or major bump is asked for. A manual dispatch never bumps: it exists
+        # to re-run a build, not to invent a version.
+        run: |
+          current='${{ steps.manifest.outputs.version }}'
+          read_version() { sed -n 's/^version:[[:space:]]*//p' | head -1 | sed "s/[[:space:]]*#.*//; s/^['\"]//; s/['\"]\$//"; }
+          if [ "${{ github.event_name }}" != 'push' ]; then
+            echo "${{ github.event_name }} — building $current as it stands."
+            echo "version=$current" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          parent=$(git show "$GITHUB_SHA^:extension.yaml" 2>/dev/null | read_version || true)
+          if [ -n "$parent" ] && [ "$parent" != "$current" ]; then
+            echo "the merge set $current itself (was $parent) — publishing that."
+            echo "version=$current" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$current" in
+            ''|*[!0-9.]*|*..*|.*|*.) echo "version '$current' is not a plain numeric version — bump it by hand"; exit 1 ;;
+          esac
+          next=$(echo "$current" | awk -F. -v OFS=. '{ $NF += 1; print }')
+          echo "$current -> $next"
+          # Anchored to the manifest's own `version:` line: a description may well contain the word.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync("extension.yaml", "utf8");
+            const out = src.replace(/^version:.*$/m, "version: " + process.argv[1]);
+            if (out === src) { console.error("could not rewrite version:"); process.exit(1); }
+            fs.writeFileSync("extension.yaml", out);
+          ' "$next"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m "Release $next [skip ci]" extension.yaml
+          # `main` is protected; GitHub Actions holds a bypass so this one push lands. A push made
+          # with GITHUB_TOKEN starts no new run, and `[skip ci]` says the same thing again in case
+          # the token is ever swapped for a PAT — between them this cannot loop.
+          git push -q origin "HEAD:$GITHUB_REF_NAME"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether this version is already out
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The tag is the record of what shipped, so it is also the gate on publishing: a re-run or a
+        # dispatch of a version that is already out builds and stops, instead of failing on a tag
+        # collision. Asking the tag survives squash merges and re-runs alike.
+        run: |
+          tag="v${{ steps.version.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — this run builds but does not publish."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Look for a Gradle module
+        id: shape
+        # Native extensions keep theirs under `native/` or `studio/`; the rest have none. Detected
+        # rather than declared so a caller never has to keep a flag in step with its own layout.
+        run: |
+          if find . -maxdepth 2 -name gradlew -not -path './.git/*' | grep -q .; then
+            echo "gradle=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gradle=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up JDK
+        if: steps.shape.outputs.gradle == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Set up the Android SDK
+        if: steps.shape.outputs.gradle == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ${{ env.ANDROID_PLATFORM }}
+
+      - name: Check out the packer
+        uses: actions/checkout@v4
+        with:
+          # Public, so the job's own token reaches it and no secret has to be kept in step across
+          # fifteen repos on a user account that has no org-level secrets to share.
+          repository: blamspotdev/j-code-make-tools
+          path: .jext-tools
+
+      - name: Install the packer
+        run: npm ci --no-audit --no-fund
+        working-directory: .jext-tools
+
+      - name: Make the Gradle wrapper runnable
+        if: steps.shape.outputs.gradle == 'true'
+        # The wrapper is committed non-executable by repos worked on from Windows, and `build.mjs`
+        # spawns it by absolute path — which is a permission error on Linux rather than a shell
+        # falling back to `sh gradlew`. Normalised here so CI does not depend on the mode any one
+        # branch happens to carry.
+        run: find . -maxdepth 2 -name gradlew -not -path './.git/*' -exec chmod +x {} +
+
+      - name: Pack
+        # `jext pack` runs the extension's own `npm run build` when it declares one, so this single
+        # command covers all three shapes: no build step, esbuild, and Gradle.
+        run: node .jext-tools/bin/jext.js pack . -o out
+
+      - name: Keep the package on the run
+        # What a merge that did not bump the version leaves behind: the same unsigned package a
+        # release would carry, downloadable from the run for as long as artifacts are kept.
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.manifest.outputs.id }}-${{ steps.version.outputs.version }}
+          path: out/*.jext
+          if-no-files-found: error
+
+      - name: Publish the release
+        if: steps.gate.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="out/${{ steps.manifest.outputs.id }}-${{ steps.version.outputs.version }}.jext"
+          test -f "$asset" || { echo "packer did not produce $asset"; ls -l out; exit 1; }
+          # The body is written here rather than left to --generate-notes so the unsigned caveat is
+          # the first thing read; the commit list is a link away rather than inlined.
+          previous=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')
+          {
+            echo "\`${{ steps.manifest.outputs.id }}\` ${{ steps.version.outputs.version }}, packed from \`${GITHUB_SHA:0:7}\`."
+            echo
+            echo "**This package is unsigned.** It installs as a development sideload. An extension"
+            echo "that ships native code will not load it until the same package has been signed for"
+            echo "the [JCode marketplace](https://github.com/blamspotdev/j-code-marketplace), which is"
+            echo "where a release meant for everyday use comes from."
+            if [ -n "$previous" ]; then
+              echo
+              echo "[Changes since $previous](${{ github.server_url }}/${{ github.repository }}/compare/$previous...${{ steps.gate.outputs.tag }})"
+            fi
+          } > notes.md
+          gh release create "${{ steps.gate.outputs.tag }}" "$asset" \
+            --title "${{ steps.manifest.outputs.name }} ${{ steps.version.outputs.version }}" \
+            --notes-file notes.md
