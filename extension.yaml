@@ -87,7 +87,7 @@ requires:
 shortDescription: >-
   A SQL Server studio — browse databases in the drawer, then manage tables, run queries, view ER diagrams and security
   in a full editor studio.
-minJCodeVersion: 1.0.0
+minJCodeVersion: 1.7.3
 targetJCodeVersion: 1.0.0
 category: Databases
 subcategory: SQL Server
