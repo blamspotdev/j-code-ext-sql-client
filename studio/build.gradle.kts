@@ -1,7 +1,6 @@
 plugins {
-    id("com.android.application") version "8.13.0"
-    id("org.jetbrains.kotlin.android") version "2.2.20"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.2.20"
+    id("com.android.application") version "9.5.1"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
 }
 
 /**
@@ -40,10 +39,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    kotlinOptions {
-        jvmTarget = "21"
-    }
-
     buildFeatures {
         compose = true
     }
@@ -51,6 +46,13 @@ android {
 
 kotlin {
     jvmToolchain(21)
+    compilerOptions {
+        // The standard library this dex runs against is JCode's, not this build's: JCode loads it
+        // parent-first, so `kotlin.*` resolves from JCode's own copy and the compiler may only call
+        // what that copy has. Raise this with minJCodeVersion, to the Kotlin the oldest supported
+        // JCode ships.
+        apiVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2
+    }
 }
 
 dependencies {
