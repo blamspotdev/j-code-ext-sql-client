@@ -46,6 +46,13 @@ android {
 
 kotlin {
     jvmToolchain(21)
+    compilerOptions {
+        // The standard library this dex runs against is JCode's, not this build's: JCode loads it
+        // parent-first, so `kotlin.*` resolves from JCode's own copy and the compiler may only call
+        // what that copy has. Raise this with minJCodeVersion, to the Kotlin the oldest supported
+        // JCode ships.
+        apiVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2
+    }
 }
 
 dependencies {
